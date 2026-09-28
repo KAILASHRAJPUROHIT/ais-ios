@@ -92,9 +92,12 @@ struct SettingsContent: View {
     private func save() {
         var h = host.trimmingCharacters(in: .whitespacesAndNewlines)
         while h.hasSuffix("/") { h.removeLast() }
+        let t = token.trimmingCharacters(in: .whitespacesAndNewlines)
         UserDefaults.standard.set(h, forKey: "aisBaseURL")
-        UserDefaults.standard.set(
-            token.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "aisAuthToken")
+        // Write to the Keychain, then remove the insecure UserDefaults copy
+        // so the token is not left readable in a backup or a rooted image.
+        _ = SecureStore().saveToken(t)
+        UserDefaults.standard.removeObject(forKey: "aisAuthToken")
         saved = true
     }
 }

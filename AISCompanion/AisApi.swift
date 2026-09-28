@@ -2,11 +2,11 @@ import Foundation
 
 /// HTTP client for the AIS backend.
 ///
-/// SECURITY: the backend now REQUIRES a bearer token on every protected
-/// route. `POST /jarvis/talk` can execute host commands, so an empty token
-/// is a hard error, not a fallback to anonymous access. The token is
-/// provisioned per device at first run and stored in the iOS Keychain -- it
-/// is never compiled into this binary.
+/// SECURITY: the backend REQUIRES a bearer token on every protected route.
+/// `POST /jarvis/talk` can execute host commands, so an empty token yields
+/// 401, not anonymous access. The token is provisioned per device at setup
+/// and stored in the iOS Keychain via SecureStore -- it is never compiled
+/// into this binary.
 ///
 /// TRUTH DISCIPLINE: a transport failure and a server rejection are distinct
 /// cases. An unreachable host is NOT "failed" and NOT "healthy" - it is
@@ -24,8 +24,16 @@ struct AisApi {
         } else {
             self.baseURL = URL(string: "http://127.0.0.1:8000")!
         }
-        if let stored = UserDefaults.standard.string(forKey: "aisAuthToken") {
-            self.authToken = stored.isEmpty ? authToken : stored
+        // Read the token from the Keychain, not UserDefaults. A value found
+        // in the legacy insecure location is used only so an existing install
+        // does not silently lose its token; SettingsContent migrates it to
+        // the Keychain on save.
+        let secure = SecureStore().readToken()
+        if !secure.isEmpty {
+            self.authToken = secure
+        } else if let legacy = UserDefaults.standard.string(forKey: "aisAuthToken"),
+                  !legacy.isEmpty {
+            self.authToken = legacy
         } else {
             self.authToken = authToken
         }

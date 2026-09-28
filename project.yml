@@ -44,3 +44,5 @@ targets:
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: NO
+        # Register the AppIcon set, otherwise the app ships with a blank tile.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

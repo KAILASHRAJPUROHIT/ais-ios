@@ -29,6 +29,7 @@ struct JarvisView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         statusCard
                         talkCard
+                        siriCard
                         presenceCard
                         voiceProfileCard
                         agentCard
@@ -105,6 +106,27 @@ struct JarvisView: View {
             Text(talkResult.detail).font(.caption2).foregroundColor(talkResult.tint)
         default: EmptyView()
         }
+    }
+
+    private var siriCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel("SIRI \u{00B7} APP SHORTCUTS")
+            Text("""
+            An iOS app cannot take the Siri wake word. It can, however, give
+            Siri a verb: this registers shortcuts that run against your host
+            and speak the reply.
+
+            Try: "Hey Siri, ask JARVIS with AIS"
+            """)
+            .font(.caption2).foregroundColor(Theme.dim)
+            ShortcutsLink()
+                .shortcutsLinkStyle(.automaticOutline)
+                .tint(Theme.accent)
+            Text("The host token must be set under System before Siri can reach the host.")
+                .font(.caption2).foregroundColor(Theme.dim)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
     }
 
     private var presenceCard: some View {
