@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SwiftUI
 
 /// Truth vocabulary, mirroring the backend's precedence (commit 03520f4):
 /// check `payload.provenance` BEFORE `temporal_modality`.
@@ -46,6 +47,24 @@ enum Truth {
         case "historical": return .historical
         case "current": return .unproven
         default: return .unverifiable
+        }
+    }
+
+    static func badgeText(_ event: EventEnvelope) -> String {
+        badge(for: event).label
+    }
+
+    /// Colour follows the label, so a badge can never look "good" while
+    /// saying UNVERIFIABLE. Unproven and unverifiable are deliberately
+    /// ambiguous colours rather than green.
+    static func badgeColor(_ event: EventEnvelope) -> Color {
+        switch badge(for: event) {
+        case .verifiedLive: return Theme.good
+        case .seededSimulated: return Theme.warn
+        case .projected: return Theme.warn
+        case .historical: return Theme.dim
+        case .unproven: return Color(red: 0.85, green: 0.65, blue: 0.25)
+        case .unverifiable: return Theme.dim
         }
     }
 }

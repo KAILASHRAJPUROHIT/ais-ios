@@ -17,16 +17,177 @@ struct RootView: View {
                 .tabItem { Label("Talk", systemImage: "mic.circle") }
             EventsView()
                 .tabItem { Label("Events", systemImage: "waveform.path.ecg") }
-            StatusView()
-                .tabItem { Label("Status", systemImage: "gauge.with.dots.needle.50percent") }
-            TasksView()
-                .tabItem { Label("Tasks", systemImage: "checklist") }
-            SettingsView()
-                .tabItem { Label("Host", systemImage: "network") }
+            LearnView()
+                .tabItem { Label("Learn", systemImage: "brain.head.profile") }
+            JarvisView()
+                .tabItem { Label("Jarvis", systemImage: "waveform.circle") }
+            SystemView()
+                .tabItem { Label("System", systemImage: "gauge.with.dots.needle.50percent") }
         }
         .tint(Theme.accent)
     }
 }
+
+/// Host configuration, health dashboard, and task control.
+///
+/// Host settings live here rather than in the tab bar so the five primary
+/// destinations stay one-thumb reachable.
+struct SystemView: View {
+    @State private var health = LoadState<Health>.idle
+    @State private var tasks = LoadState<[String: Any]>.idle
+    @State private var latest = LoadState<EventEnvelope?>.idle
+    @State private var newTask = ""
+    @State private var busy = false
+    private let api = AisApi()
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Theme.bg.ignoresSafeArea()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        healthCard
+                        latestCard
+                        tasksCard
+                        SettingsContent()
+                    }
+                    .padding(14)
+                }
+            }
+            .navigationTitle("SYSTEM")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { load() } label: { Image(systemName: "arrow.clockwise") }
+                }
+            }
+            .task { load() }
+        }
+    }
+
+    private var healthCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                SectionLabel("HEALTH \u{00B7} GET /health")
+                Spacer()
+                StateBanner(state: health)
+            }
+            if case .loaded(let h) = health {
+                KV(key: "status", value: h.statusLabel ?? h.status ?? "",
+                   tint: (h.status == "HEALTHY") ? Theme.good : Theme.warn)
+                KV(key: "provenance", value: h.provenance ?? "")
+                metrics("MODELS", h.models)
+                metrics("PROVIDERS", h.providers)
+                metrics("TESTING", h.testing)
+                metrics("LAYA", h.laya)
+            } else {
+                Text(health.detail).font(.caption2).foregroundColor(health.tint)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
+    }
+
+    /// A NULL metric is UNMEASURED. It is never rendered as 0.
+    private func metrics(_ label: String, _ m: Health.Metrics?) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            SectionLabel(label)
+            if let m {
+                KV(key: "healthy/total", value: "\(m.healthy.map(String.init) ?? "?")/\(m.registered.map(String.init) ?? "?")")
+                KV(key: "pass_rate", value: m.passRate.map { String(format: "%.3f", $0) } ?? "UNMEASURED")
+                KV(key: "decisions", value: m.totalDecisions.map(String.init) ?? "UNMEASURED")
+                KV(key: "latency", value: m.meanLatencyMs.map { String(format: "%.2f ms", $0) } ?? "UNMEASURED")
+            } else {
+                Text("UNMEASURED")
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundColor(Theme.dim)
+            }
+        }
+    }
+
+    private var latestCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                SectionLabel("LATEST EVENT \u{00B7} GET /events/latest")
+                Spacer()
+                StateBanner(state: latest)
+            }
+            switch latest {
+            case .loaded(let e):
+                if let e { EventCard(index: 0, event: e) }
+                else {
+                    Text("No events recorded yet. This is an empty state, not a failure.")
+                        .font(.caption2).foregroundColor(Theme.dim)
+                }
+            case .unreachable, .rejected:
+                Text(latest.detail).font(.caption2).foregroundColor(latest.tint)
+            default: EmptyView()
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
+    }
+
+    private var tasksCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                SectionLabel("TASKS \u{00B7} POST /tasks")
+                Spacer()
+                StateBanner(state: tasks)
+            }
+            HStack {
+                TextField("new task title", text: $newTask)
+                    .textFieldStyle(.roundedBorder)
+                Button("ADD") { addTask() }
+                    .buttonStyle(.bordered).tint(Theme.accent)
+                    .disabled(newTask.isEmpty || busy)
+            }
+            if case .loaded(let o) = tasks {
+                KV(key: "payload", value: JarvisView.render(o))
+            } else if case .unreachable = tasks {
+                Text(tasks.detail).font(.caption2).foregroundColor(Theme.warn)
+            } else if case .rejected = tasks {
+                Text(tasks.detail).font(.caption2).foregroundColor(Theme.bad)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
+    }
+
+    private func load() {
+        Task {
+            async let a = fetchHealth()
+            async let b = fetchLatest()
+            _ = await (a, b)
+        }
+    }
+
+    private func fetchHealth() async {
+        health = .loading
+        do { health = .loaded(try await api.health()) }
+        catch { health = stateFor(error) }
+    }
+
+    private func fetchLatest() async {
+        latest = .loading
+        do { latest = .loaded(try await api.latestEvent()) }
+        catch { latest = stateFor(error) }
+    }
+
+    private func addTask() {
+        busy = true
+        Task {
+            defer { busy = false }
+            do {
+                try await api.createTask(newTask)
+                newTask = ""
+                tasks = .loaded(try await api.tasks())
+            } catch {
+                tasks = stateFor(error)
+            }
+        }
+    }
+}
+
 
 enum Theme {
     static let bg = Color(red: 0.039, green: 0.055, blue: 0.078)
