@@ -94,6 +94,19 @@ struct JarvisView: View {
                 KV(key: "decision", value: r.decisionType ?? "")
                 KV(key: "laya", value: r.latencyLayaMs.map { String(format: "%.2f ms", $0) } ?? "UNMEASURED")
                 KV(key: "events", value: r.eventsPublished.map(String.init) ?? "UNMEASURED")
+
+                // The backend reports whether each action ACTUALLY ran. A 200
+                // with nothing executed is not a success, and the UI must not
+                // present it as one.
+                if let actions = r.actions, !actions.isEmpty {
+                    Text("ACTIONS")
+                        .font(.caption2).foregroundColor(Theme.dim)
+                    ForEach(actions) { a in
+                        KV(key: a.action ?? "?",
+                           value: a.executed == true ? "EXECUTED" : "NOT EXECUTED",
+                           tint: a.executed == true ? Theme.good : Theme.warn)
+                    }
+                }
                 if let t = r.traceId, !t.isEmpty {
                     NavigationLink {
                         ChainView(traceId: t, title: "TALK TRACE")

@@ -49,6 +49,10 @@ struct SystemView: View {
                         healthCard
                         latestCard
                         tasksCard
+                        UpdateView()
+                            .padding(12)
+                            .background(Color.black.opacity(0.2))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
                         SettingsContent()
                     }
                     .padding(14)

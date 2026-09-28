@@ -180,21 +180,33 @@ struct AisApi {
         return try Self.object(from: data)
     }
 
-    // MARK: - JARVIS (full parity)
+    // MARK: - JARVIS
     //
-    // These bodies are intentionally raw JSON. Their schemas were not
-    // verified against app/api/jarvis.py when this was written, and guessing
-    // field names would render plausible-but-false data. Type them only after
-    // reading that file.
+    // Request bodies are transcribed from backend/app/schemas/jarvis.py.
+    //
+    // NOTE: /jarvis/voice does NOT take text. It takes base64 audio recorded
+    // on the device; Whisper transcribes it on the host. An earlier draft of
+    // this file sent {"text": ...}, which the backend would not have accepted.
+    // Likewise /jarvis/screen takes a base64 screenshot plus a question, not
+    // an action/target pair.
 
-    func voice(text: String) async throws -> [String: Any] {
-        try Self.object(from: await request("jarvis/voice", method: "POST", body: ["text": text]))
+    /// Send recorded audio for on-host transcription. `audioBase64` is raw
+    /// base64 (no data: prefix). `format` is webm, wav, or ogg.
+    func voice(audioBase64: String, format: String = "webm",
+               dryRun: Bool = true) async throws -> JarvisTalkResponse {
+        let data = try await request("jarvis/voice", method: "POST",
+                                     body: ["audio_base64": audioBase64,
+                                            "format": format,
+                                            "dry_run": dryRun])
+        return try JSONDecoder().decode(JarvisTalkResponse.self, from: data)
     }
 
-    func screen(action: String, target: String? = nil) async throws -> [String: Any] {
-        var b: [String: Any] = ["action": action]
-        if let target { b["target"] = target }
-        return try Self.object(from: await request("jarvis/screen", method: "POST", body: b))
+    /// Ask about a screenshot. `imageBase64` is a base64 JPEG/PNG.
+    func screen(imageBase64: String,
+                query: String = "What is on my screen right now? Explain concisely in 1 to 2 spoken sentences for text-to-speech.") async throws -> JarvisTalkResponse {
+        let data = try await request("jarvis/screen", method: "POST",
+                                     body: ["image_base64": imageBase64, "query": query])
+        return try JSONDecoder().decode(JarvisTalkResponse.self, from: data)
     }
 
     func presence() async throws -> [String: Any] {
@@ -205,9 +217,15 @@ struct AisApi {
         try Self.object(from: await request("jarvis/presence/check", method: "POST", body: ["state": state]))
     }
 
-    func runAgent(goal: String, maxSteps: Int = 10) async throws -> [String: Any] {
-        try Self.object(from: await request("jarvis/agent/run", method: "POST",
-                                            body: ["goal": goal, "max_steps": maxSteps]))
+    func jarvisStatusTyped() async throws -> JarvisStatus {
+        let data = try await request("jarvis/status")
+        return try JSONDecoder().decode(JarvisStatus.self, from: data)
+    }
+
+    func runAgent(goal: String, maxSteps: Int = 10) async throws -> AgentRun {
+        let data = try await request("jarvis/agent/run", method: "POST",
+                                     body: ["goal": goal, "max_steps": maxSteps])
+        return try JSONDecoder().decode(AgentRun.self, from: data)
     }
 
     func voiceProfile() async throws -> [String: Any] {

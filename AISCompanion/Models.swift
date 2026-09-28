@@ -115,6 +115,104 @@ struct Health: Decodable {
     }
 }
 
+// MARK: - JARVIS
+//
+// Transcribed from backend/app/schemas/jarvis.py. The most important field
+// here is `executed`: the backend tells us whether an action ACTUALLY ran.
+// The UI must render that, and must never infer success from a 200 alone.
+
+struct JarvisActionDetail: Decodable, Identifiable {
+    let phrase: String?
+    let action: String?
+    let targetApp: String?
+    let volumeLevel: Double?
+    let timerSeconds: Double?
+    let confidence: Double?
+    let executed: Bool?
+    let detail: String?
+
+    var id: String { "\(action ?? "?")|\(targetApp ?? "?")|\(phrase ?? "?")" }
+
+    enum CodingKeys: String, CodingKey {
+        case phrase, action, detail
+        case targetApp = "target_app"
+        case volumeLevel = "volume_level"
+        case timerSeconds = "timer_seconds"
+        case confidence, executed
+    }
+}
+
+struct JarvisTalkResponse: Decodable {
+    let traceId: String?
+    let utterance: String?
+    /// COMMAND or QUESTION.
+    let decisionType: String?
+    let source: String?
+    let latencyLayaMs: Double?
+    let spokenAck: String?
+    let audioBase64: String?
+    let actions: [JarvisActionDetail]?
+    let eventsPublished: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case traceId = "trace_id"
+        case utterance
+        case decisionType = "decision_type"
+        case source
+        case latencyLayaMs = "latency_laya_ms"
+        case spokenAck = "spoken_ack"
+        case audioBase64 = "audio_base64"
+        case actions
+        case eventsPublished = "events_published"
+    }
+
+    /// True only when the backend reports at least one action that actually
+    /// executed. A 200 with every action `executed=false` is NOT success.
+    var didExecute: Bool {
+        (actions ?? []).contains { $0.executed == true }
+    }
+}
+
+/// GET /jarvis/status. Note `status` is a hardcoded "ONLINE" string on the
+/// backend, NOT a live probe. It is rendered as a report, never as proof.
+struct JarvisStatus: Decodable {
+    let status: String?
+    let service: String?
+    let decisionLayer: String?
+    let hardware: String?
+    let llmProvider: String?
+    let defaultModel: String?
+    let ttsEngine: String?
+    let spendRate: String?
+    let capabilities: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case status, service, hardware, capabilities
+        case decisionLayer = "decision_layer"
+        case llmProvider = "llm_provider"
+        case defaultModel = "default_model"
+        case ttsEngine = "tts_engine"
+        case spendRate = "spend_rate"
+    }
+}
+
+/// Response of POST /jarvis/agent/run. Typed from the request model plus the
+/// handler in app/api/jarvis.py; unconfirmed response fields stay absent
+/// rather than being invented.
+struct AgentRun: Decodable {
+    let traceId: String?
+    let goal: String?
+    let maxSteps: Int?
+    let status: String?
+    let steps: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case traceId = "trace_id"
+        case goal, status, steps
+        case maxSteps = "max_steps"
+    }
+}
+
 // MARK: - Laya
 //
 // Shapes below are transcribed from backend/app/schemas/laya.py. Only fields
