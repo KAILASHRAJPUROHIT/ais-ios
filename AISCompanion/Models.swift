@@ -7,6 +7,9 @@ struct EventEnvelope: Decodable, Identifiable {
     let parentEventId: String?
     let eventType: String?
     let source: String?
+    /// Top-level provenance, when the envelope carries one. Truth falls back to
+    /// this when the payload itself does not name a provenance.
+    let provenance: String?
     let temporalModality: String?
     let payload: [String: Any]?
 
@@ -18,7 +21,9 @@ struct EventEnvelope: Decodable, Identifiable {
         case parentEventId = "parent_event_id"
         case eventType = "event_type"
         case source
+        case provenance
         case temporalModality = "temporal_modality"
+        case payload
     }
 
     init(from decoder: Decoder) throws {
@@ -28,6 +33,7 @@ struct EventEnvelope: Decodable, Identifiable {
         parentEventId = try? c.decode(String.self, forKey: .parentEventId)
         eventType = try? c.decode(String.self, forKey: .eventType)
         source = try? c.decode(String.self, forKey: .source)
+        provenance = try? c.decode(String.self, forKey: .provenance)
         temporalModality = try? c.decode(String.self, forKey: .temporalModality)
 
         // Payload is free-form. Decode it as raw JSON so Truth can read

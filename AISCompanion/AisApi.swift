@@ -81,7 +81,11 @@ struct AisApi {
 
         guard let http = response as? HTTPURLResponse else { throw ApiError.malformed }
         guard (200..<300).contains(http.statusCode) else {
-            let text = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            // `data` here is a non-optional `Data` (URLSession.data(for:) always
+            // returns Data, possibly empty). `flatMap` on a non-optional value
+            // tried to apply the String(data:encoding:) overload element-wise,
+            // which failed to type-check.
+            let text = data.isEmpty ? "" : String(decoding: data, as: UTF8.self)
             throw ApiError.rejected(http.statusCode, String(text.prefix(200)))
         }
         return data ?? Data()
@@ -175,9 +179,9 @@ struct AisApi {
         }
 
         for try await line in bytes.lines {
-            guard let line, line.hasPrefix("data:") else { continue }
+            guard line.hasPrefix("data:") else { continue }
             let raw = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
-            guard let data = raw.data(using: .utf8) else { continue }
+            let data = Data(raw.utf8)
             if let evt = try? JSONDecoder().decode(EventEnvelope.self, from: data) {
                 emit(.event(evt))
             }
