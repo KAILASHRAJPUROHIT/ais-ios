@@ -1,7 +1,4 @@
 import SwiftUI
-// ShortcutsLink (used by the Siri card) is declared in AppIntentsUI, not
-// AppIntents. The intent types themselves live in AppIntents.
-import AppIntentsUI
 
 /// JARVIS controls: presence, voice, screen, agent, and the voice profile.
 ///
@@ -116,17 +113,20 @@ struct JarvisView: View {
             SectionLabel("SIRI \u{00B7} APP SHORTCUTS")
             Text("""
             An iOS app cannot take the Siri wake word. It can, however, give
-            Siri a verb: this registers shortcuts that run against your host
-            and speak the reply.
+            Siri a verb: this app registers shortcuts that run against your
+            host and speak the reply.
 
             Try: "Hey Siri, ask JARVIS with AIS"
+            "Hey Siri, is AIS online"
             """)
             .font(.caption2).foregroundColor(Theme.dim)
-            ShortcutsLink()
-                .shortcutsLinkStyle(.automaticOutline)
-                .tint(Theme.accent)
+            Text("""
+            To add or rephrase these, open the Shortcuts app, tap the AIS
+            app, and edit the "Talk to JARVIS" shortcut's phrases.
+            """)
+            .font(.caption2).foregroundColor(Theme.dim)
             Text("The host token must be set under System before Siri can reach the host.")
-                .font(.caption2).foregroundColor(Theme.dim)
+                .font(.caption2).foregroundColor(Theme.warn)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .card()
