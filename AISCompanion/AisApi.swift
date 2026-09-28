@@ -8,7 +8,7 @@ import Foundation
 /// Set `authToken` only once the backend enforces it.
 ///
 /// TRUTH DISCIPLINE: a transport failure and a server rejection are distinct
-/// cases. An unreachable host is NOT "failed" and NOT "healthy" — it is
+/// cases. An unreachable host is NOT "failed" and NOT "healthy" â€” it is
 /// UNREACHABLE, which the UI renders differently.
 struct AisApi {
     var baseURL: URL
@@ -49,8 +49,15 @@ struct AisApi {
         }
     }
 
+    /// Perform a request.
+    ///
+    /// NOTE: this was previously a blocking `URLSession.dataTask` bridged with
+    /// a `DispatchSemaphore` and a shared `var result` mutated from an escaping
+    /// closure. That is a data race, and newer Swift compilers reject the
+    /// "mutation of captured var in concurrently-executing code" pattern. It
+    /// also blocked a thread for up to 40s. Plain async/await is correct here.
     private func request(_ path: String, method: String = "GET",
-                         body: [String: Any]? = nil) throws -> Data {
+                         body: [String: Any]? = nil) async throws -> Data {
         var req = URLRequest(url: baseURL.appendingPathComponent(path))
         req.httpMethod = method
         req.timeoutInterval = method == "GET" ? 12 : 30
@@ -62,36 +69,34 @@ struct AisApi {
             req.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         }
 
-        let semaphore = DispatchSemaphore(value: 0)
-        var result: Result<Data, ApiError> = .failure(.unreachable("no response"))
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: req)
+        } catch {
+            // A transport failure is distinct from a server rejection: the UI
+            // renders UNREACHABLE differently from an HTTP error.
+            throw ApiError.unreachable(error.localizedDescription)
+        }
 
-        URLSession.shared.dataTask(with: req) { data, response, error in
-            defer { semaphore.signal() }
-            if let error { result = .failure(.unreachable(error.localizedDescription)); return }
-            guard let http = response as? HTTPURLResponse else {
-                result = .failure(.malformed); return
-            }
-            guard (200..<300).contains(http.statusCode) else {
-                let b = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
-                result = .failure(.rejected(http.statusCode, String(b.prefix(200)))); return
-            }
-            result = .success(data ?? Data())
-        }.resume()
-
-        _ = semaphore.wait(timeout: .now() + 40)
-        return try result.get()
+        guard let http = response as? HTTPURLResponse else { throw ApiError.malformed }
+        guard (200..<300).contains(http.statusCode) else {
+            let text = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            throw ApiError.rejected(http.statusCode, String(text.prefix(200)))
+        }
+        return data ?? Data()
     }
 
 
     // MARK: - Health / Status
 
     func health() async throws -> Health {
-        let data = try await perform { try request("health") }
+        let data = try await request("health")
         return try JSONDecoder().decode(Health.self, from: data)
     }
 
     func jarvisStatus() async throws -> [String: Any] {
-        let data = try await perform { try request("jarvis/status") }
+        let data = try await request("jarvis/status")
         guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw ApiError.malformed
         }
@@ -101,7 +106,7 @@ struct AisApi {
     // MARK: - Events
 
     func latestEvent() async throws -> EventEnvelope? {
-        let data = try await perform { try request("events/latest") }
+        let data = try await request("events/latest")
         if data.isEmpty { return nil }  // empty body is a valid empty state
         return try JSONDecoder().decode(EventEnvelope.self, from: data)
     }
@@ -111,18 +116,14 @@ struct AisApi {
     /// `dryRun` is surfaced explicitly because the backend currently stamps
     /// provenance=REAL_EXECUTION on the event chain even for dry runs.
     func talk(_ utterance: String, dryRun: Bool) async throws -> JarvisReply {
-        let data = try await perform {
-            try request("jarvis/talk", method: "POST",
-                        body: ["utterance": utterance, "dry_run": dryRun])
-        }
+        let data = try await request("jarvis/talk", method: "POST",
+                                     body: ["utterance": utterance, "dry_run": dryRun])
         return try JSONDecoder().decode(JarvisReply.self, from: data)
     }
 
     func createTask(_ title: String) async throws {
-        _ = try await perform {
-            try request("tasks", method: "POST",
-                        body: ["title": title, "description": ""])
-        }
+        _ = try await request("tasks", method: "POST",
+                              body: ["title": title, "description": ""])
     }
 
     // MARK: - SSE
@@ -179,16 +180,6 @@ struct AisApi {
             guard let data = raw.data(using: .utf8) else { continue }
             if let evt = try? JSONDecoder().decode(EventEnvelope.self, from: data) {
                 emit(.event(evt))
-            }
-        }
-    }
-
-    private func perform(_ block: () throws -> Data) async throws -> Data {
-        try await withCheckedThrowingContinuation { cont in
-            DispatchQueue.global(qos: .userInitiated).async {
-                do { cont.resume(returning: try block()) }
-                catch let e as ApiError { cont.resume(throwing: e) }
-                catch { cont.resume(throwing: ApiError.unreachable(error.localizedDescription)) }
             }
         }
     }

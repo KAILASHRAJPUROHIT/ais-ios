@@ -54,12 +54,16 @@ jobs:
 
       - name: Generate Xcode project
         working-directory: .
-        run: xcodegen generate
+        run: |
+          xcodegen generate
+          # Confirm the scheme actually exists. A missing scheme is a common
+          # cause of "exit code 65" that looks like a compile failure.
+          xcodebuild -list -project AISCompanion.xcodeproj
 
       - name: Build unsigned ipa
         working-directory: .
         run: |
-          set -euo pipefail
+          set -uo pipefail
           rm -rf build
           xcodebuild \
             -project AISCompanion.xcodeproj \
@@ -71,16 +75,49 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            archive
+            archive 2>&1 | tee build/xcodebuild.log
+          STATUS=${PIPESTATUS[0]}
+
+          # Surface the real error in the run SUMMARY, which is visible on the
+          # run page without signing in. The raw log is also uploaded as an
+          # artifact, which is likewise downloadable anonymously.
+          {
+            echo "### xcodebuild exit code: $STATUS"
+            echo ""
+            echo '```'
+            grep -E "error:|warning: .*deprecat|BUILD FAILED|does not contain a scheme|The following build commands failed" build/xcodebuild.log | head -60 || echo "(no error lines matched)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$STATUS" -ne 0 ]; then
+            echo "--- last 40 lines of build log ---" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -40 build/xcodebuild.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit "$STATUS"
+          fi
 
           mkdir -p build/Payload
           APP=$(find build/AISCompanion.xcarchive/Products -name "AISCompanion.app" -maxdepth 3 | head -1)
-          if [ -z "$APP" ]; then echo "app bundle not found"; exit 1; fi
+          if [ -z "$APP" ]; then
+            echo "app bundle not found in archive" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
           cp -R "$APP" build/Payload/
           cd build
           zip -qry ../AISCompanion-unsigned.ipa Payload
           cd ..
           echo "Built:"; ls -la AISCompanion-unsigned.ipa
+
+      - name: Upload build log
+        # Uploaded on failure too, and downloadable without signing in, so the
+        # real compiler error is never hidden behind the auth wall.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: build/xcodebuild.log
+          if-no-files-found: ignore
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
