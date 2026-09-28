@@ -1,4 +1,7 @@
 import SwiftUI
+// ShortcutsLink (used by the Siri card) is declared in AppIntentsUI, not
+// AppIntents. The intent types themselves live in AppIntents.
+import AppIntentsUI
 
 /// JARVIS controls: presence, voice, screen, agent, and the voice profile.
 ///
