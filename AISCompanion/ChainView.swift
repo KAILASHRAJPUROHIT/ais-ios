@@ -28,16 +28,26 @@ struct ChainView: View {
                 Theme.bg.ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 10) {
+                        // Header drawn inline rather than via .toolbar.
+                        // toolbar(content:) was ambiguous here, and a sheet
+                        // does not need navigation chrome.
                         HStack {
-                            StateBanner(state: state)
+                            Text(title)
+                                .font(.caption.weight(.bold))
+                                .foregroundColor(Theme.accent)
                             Spacer()
-                            Picker("route", selection: $useLearningLoopRoute) {
-                                Text("events/chain").tag(false)
-                                Text("learning-loop").tag(true)
+                            StateBanner(state: state)
+                            Button { load() } label: {
+                                Image(systemName: "arrow.clockwise")
                             }
-                            .pickerStyle(.segmented)
-                            .frame(width: 210)
+                            Button("CLOSE") { dismiss() }
+                                .font(.caption.weight(.semibold))
                         }
+                        Picker("route", selection: $useLearningLoopRoute) {
+                            Text("events/chain").tag(false)
+                            Text("learning-loop").tag(true)
+                        }
+                        .pickerStyle(.segmented)
                         KV(key: "trace_id", value: traceId)
 
                         switch state {
@@ -60,17 +70,10 @@ struct ChainView: View {
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
-            // ToolbarItemGroup (not ToolbarItem): ToolbarItem conforms to both
-            // View and ToolbarContent, which makes the toolbar(content:)
-            // overload ambiguous. ToolbarItemGroup is ToolbarContent only.
-            .toolbar {
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button { load() } label: { Image(systemName: "arrow.clockwise") }
-                    Button("CLOSE") { dismiss() }
-                }
-            }
             .task { load() }
-            .onChange(of: useLearningLoopRoute) { _, _ in load() }
+            // Single-parameter onChange: the two-parameter form is iOS 17,
+            // but this target deploys to iOS 16.0.
+            .onChange(of: useLearningLoopRoute) { _ in load() }
         }
     }
 
