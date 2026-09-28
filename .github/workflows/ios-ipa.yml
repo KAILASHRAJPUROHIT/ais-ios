@@ -1,0 +1,81 @@
+name: Build iOS IPA
+
+# Produces an unsigned .ipa on a macOS runner.
+#
+# WHY THIS EXISTS
+# ---------------
+# An .ipa cannot be built on Windows: Apple's iOS SDK and Xcode are macOS-only,
+# and the SDK licence forbids use on other platforms. This workflow runs the
+# real Xcode toolchain on GitHub's macOS runner, so a Windows machine can
+# produce a genuine binary.
+#
+# It is built with CODE_SIGNING_ALLOWED=NO, which yields an UNSIGNED ipa.
+# That is exactly what Sideloadly / AltStore / AltStore-Side require: they
+# apply the user's own Apple ID signature at install time.
+#
+# To download: open the repo -> Actions -> this workflow -> the run ->
+# "Artifacts" -> download the .zip, unzip, install the .ipa.
+#
+# NOTE ON EXPIRY: an app signed with a FREE Apple ID expires after 7 days and
+# must be re-signed and reinstalled each week. That limit is imposed by Apple
+# on free provisioning profiles and cannot be bypassed by any build setting.
+# A paid Apple Developer Program membership ($99/yr) gives a 1-year profile.
+# If the 7-day re-sign is unacceptable, use the PWA at
+# https://ai.ambicdigital.in/pwa/ instead, which never expires.
+
+on:
+  push:
+    paths:
+      - "apps/ais-companion-ios/**"
+      - ".github/workflows/ios-ipa.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build unsigned IPA
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: apps/ais-companion-ios
+        run: xcodegen generate
+
+      - name: Build unsigned ipa
+        working-directory: apps/ais-companion-ios
+        run: |
+          set -euo pipefail
+          rm -rf build
+          xcodebuild \
+            -project AISCompanion.xcodeproj \
+            -scheme AISCompanion \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build/DD \
+            -archivePath build/AISCompanion.xcarchive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            archive
+
+          mkdir -p build/Payload
+          APP=$(find build/AISCompanion.xcarchive/Products -name "AISCompanion.app" -maxdepth 3 | head -1)
+          if [ -z "$APP" ]; then echo "app bundle not found"; exit 1; fi
+          cp -R "$APP" build/Payload/
+          cd build
+          zip -qry ../AISCompanion-unsigned.ipa Payload
+          cd ..
+          echo "Built:"; ls -la AISCompanion-unsigned.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: AISCompanion-unsigned-ipa
+          path: apps/ais-companion-ios/AISCompanion-unsigned.ipa
+          if-no-files-found: error

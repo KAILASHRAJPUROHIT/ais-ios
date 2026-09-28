@@ -1,0 +1,46 @@
+name: AISCompanion
+options:
+  bundleIdPrefix: in.ambicdigital
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  AISCompanion:
+    type: application
+    platform: iOS
+    sources:
+      - path: AISCompanion
+    info:
+      path: AISCompanion/Info.plist
+      properties:
+        CFBundleDisplayName: AIS
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen:
+          UIColorName: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # Required for talk-to-speak: the app records audio on the device and
+        # posts it to the AIS host, where Whisper transcribes it.
+        NSMicrophoneUsageDescription: >-
+          AIS records your voice so it can be transcribed by your own AIS host
+          and turned into a command or answer.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        UIBackgroundModes:
+          - audio
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: in.ambicdigital.companion
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: NO
