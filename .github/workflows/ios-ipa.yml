@@ -35,6 +35,10 @@ jobs:
   build:
     name: Build unsigned IPA
     runs-on: macos-14
+    # `permissions` is only valid at workflow or JOB level. Placing it under a
+    # step is ignored, and the "Publish failure log" step then cannot push.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -126,8 +130,6 @@ jobs:
         # Written to the repo root, which is outside the workflow's `paths`
         # trigger, so publishing a failure does not start another build.
         if: failure()
-        permissions:
-          contents: write
         run: |
           set -uo pipefail
           {
