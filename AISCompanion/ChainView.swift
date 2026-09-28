@@ -60,12 +60,13 @@ struct ChainView: View {
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
+            // ToolbarItemGroup (not ToolbarItem): ToolbarItem conforms to both
+            // View and ToolbarContent, which makes the toolbar(content:)
+            // overload ambiguous. ToolbarItemGroup is ToolbarContent only.
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("CLOSE") { dismiss() }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
                     Button { load() } label: { Image(systemName: "arrow.clockwise") }
+                    Button("CLOSE") { dismiss() }
                 }
             }
             .task { load() }

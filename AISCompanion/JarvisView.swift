@@ -39,7 +39,7 @@ struct JarvisView: View {
             }
             .navigationTitle("JARVIS")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
                     Button { load() } label: { Image(systemName: "arrow.clockwise") }
                 }
             }

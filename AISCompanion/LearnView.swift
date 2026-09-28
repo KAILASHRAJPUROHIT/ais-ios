@@ -34,7 +34,7 @@ struct LearnView: View {
             }
             .navigationTitle("LEARN")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
                     Button { loadAll() } label: { Image(systemName: "arrow.clockwise") }
                 }
             }

@@ -56,7 +56,7 @@ struct SystemView: View {
             }
             .navigationTitle("SYSTEM")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
                     Button { load() } label: { Image(systemName: "arrow.clockwise") }
                 }
             }
