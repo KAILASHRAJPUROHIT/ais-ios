@@ -72,23 +72,6 @@ struct AnyCodable: Decodable {
     }
 }
 
-/// Reply from POST /jarvis/talk.
-struct JarvisReply: Decodable {
-    let traceId: String?
-    let decisionType: String?
-    let latencyLayaMs: Double?
-    let spokenAck: String?
-    let eventsPublished: Int?
-
-    enum CodingKeys: String, CodingKey {
-        case traceId = "trace_id"
-        case decisionType = "decision_type"
-        case latencyLayaMs = "latency_laya_ms"
-        case spokenAck = "spoken_ack"
-        case eventsPublished = "events_published"
-    }
-}
-
 /// Health from GET /health. Nullable fields are intentional: the backend
 /// reports NULL (not 0) where something is unmeasured, and the UI must not
 /// turn that into a number.

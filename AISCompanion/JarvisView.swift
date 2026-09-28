@@ -12,9 +12,9 @@ struct JarvisView: View {
     @State private var profile = LoadState<[String: Any]>.idle
 
     @State private var utterance = ""
-    @State private var talkResult = LoadState<JarvisReply>.idle
+    @State private var talkResult = LoadState<JarvisTalkResponse>.idle
     @State private var agentGoal = ""
-    @State private var agentResult = LoadState<[String: Any]>.idle
+    @State private var agentResult = LoadState<AgentRun>.idle
     @State private var presenceState = "home"
     @State private var lastAction = LoadState<[String: Any]>.idle
     @State private var busy = false
@@ -201,8 +201,18 @@ struct JarvisView: View {
             Button("RUN AGENT") { runAgent() }
                 .buttonStyle(.bordered).tint(Theme.accent)
                 .disabled(agentGoal.isEmpty || busy)
-            if case .loaded(let o) = agentResult {
-                KV(key: "result", value: Self.render(o))
+            if case .loaded(let a) = agentResult {
+                VStack(alignment: .leading, spacing: 2) {
+                    KV(key: "goal", value: a.goal ?? agentGoal, mono: false)
+                    KV(key: "status", value: a.status ?? "")
+                    KV(key: "max_steps", value: a.maxSteps.map(String.init) ?? "UNMEASURED")
+                    KV(key: "trace_id", value: a.traceId ?? "")
+                    if let s = a.steps, !s.isEmpty {
+                        ForEach(Array(s.enumerated()), id: \.offset) { i, step in
+                            KV(key: "step \(i + 1)", value: step, mono: false)
+                        }
+                    }
+                }
             } else if case .unreachable = agentResult {
                 Text(agentResult.detail).font(.caption2).foregroundColor(Theme.warn)
             } else if case .rejected = agentResult {

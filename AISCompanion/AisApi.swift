@@ -127,11 +127,13 @@ struct AisApi {
     // MARK: - JARVIS
 
     /// `dryRun` is surfaced explicitly because the backend currently stamps
-    /// provenance=REAL_EXECUTION on the event chain even for dry runs.
-    func talk(_ utterance: String, dryRun: Bool) async throws -> JarvisReply {
+    /// provenance=REAL_EXECUTION on the event chain even for dry runs. The
+    /// reply's `actions[].executed` is what actually reports whether anything
+    /// ran, and the UI renders that rather than inferring success from HTTP 200.
+    func talk(_ utterance: String, dryRun: Bool) async throws -> JarvisTalkResponse {
         let data = try await request("jarvis/talk", method: "POST",
                                      body: ["utterance": utterance, "dry_run": dryRun])
-        return try JSONDecoder().decode(JarvisReply.self, from: data)
+        return try JSONDecoder().decode(JarvisTalkResponse.self, from: data)
     }
 
     func createTask(_ title: String) async throws {
