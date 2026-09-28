@@ -2,13 +2,14 @@ import Foundation
 
 /// HTTP client for the AIS backend.
 ///
-/// SECURITY: the backend currently has NO authentication and
-/// `POST /jarvis/talk` can execute Windows commands on the host
-/// (LOCK_PC / SLEEP_PC). Keep `baseURL` on a LAN address.
-/// Set `authToken` only once the backend enforces it.
+/// SECURITY: the backend now REQUIRES a bearer token on every protected
+/// route. `POST /jarvis/talk` can execute host commands, so an empty token
+/// is a hard error, not a fallback to anonymous access. The token is
+/// provisioned per device at first run and stored in the iOS Keychain -- it
+/// is never compiled into this binary.
 ///
 /// TRUTH DISCIPLINE: a transport failure and a server rejection are distinct
-/// cases. An unreachable host is NOT "failed" and NOT "healthy" â€” it is
+/// cases. An unreachable host is NOT "failed" and NOT "healthy" - it is
 /// UNREACHABLE, which the UI renders differently.
 struct AisApi {
     var baseURL: URL
@@ -88,7 +89,7 @@ struct AisApi {
             let text = data.isEmpty ? "" : String(decoding: data, as: UTF8.self)
             throw ApiError.rejected(http.statusCode, String(text.prefix(200)))
         }
-        return data ?? Data()
+        return data
     }
 
 
@@ -128,6 +129,148 @@ struct AisApi {
     func createTask(_ title: String) async throws {
         _ = try await request("tasks", method: "POST",
                               body: ["title": title, "description": ""])
+    }
+
+    // MARK: - Events (full parity)
+
+    func publishEvent(type: String, payload: [String: Any],
+                      source: String = "ais.companion.ios") async throws -> EventEnvelope? {
+        let data = try await request("events", method: "POST",
+                                     body: ["event_type": type, "source": source,
+                                            "payload": payload])
+        return try? JSONDecoder().decode(EventEnvelope.self, from: data)
+    }
+
+    func events(limit: Int = 100, eventType: String? = nil) async throws -> [EventEnvelope] {
+        var q = [URLQueryItem(name: "limit", value: String(limit))]
+        if let eventType { q.append(URLQueryItem(name: "event_type", value: eventType)) }
+        let data = try await request("events?" + Self.query(q))
+        return try JSONDecoder().decode([EventEnvelope].self, from: data)
+    }
+
+    /// Causal chain for one trace. An unknown trace yields an empty list, not
+    /// an error, and must not be rendered as a failure.
+    func chain(traceId: String) async throws -> [EventEnvelope] {
+        let data = try await request("events/chain/\(traceId)")
+        return try JSONDecoder().decode([EventEnvelope].self, from: data)
+    }
+
+    func taskLifecycleDemo() async throws -> [String: Any] {
+        let data = try await request("events/task-lifecycle-demo", method: "POST", body: [:])
+        return try Self.object(from: data)
+    }
+
+    // MARK: - Tasks (full parity)
+
+    func tasks() async throws -> [String: Any] {
+        let data = try await request("tasks")
+        return try Self.object(from: data)
+    }
+
+    func updateTask(_ taskId: String, state: String) async throws -> [String: Any] {
+        let data = try await request("tasks/\(taskId)", method: "PATCH", body: ["state": state])
+        return try Self.object(from: data)
+    }
+
+    // MARK: - JARVIS (full parity)
+    //
+    // These bodies are intentionally raw JSON. Their schemas were not
+    // verified against app/api/jarvis.py when this was written, and guessing
+    // field names would render plausible-but-false data. Type them only after
+    // reading that file.
+
+    func voice(text: String) async throws -> [String: Any] {
+        try Self.object(from: await request("jarvis/voice", method: "POST", body: ["text": text]))
+    }
+
+    func screen(action: String, target: String? = nil) async throws -> [String: Any] {
+        var b: [String: Any] = ["action": action]
+        if let target { b["target"] = target }
+        return try Self.object(from: await request("jarvis/screen", method: "POST", body: b))
+    }
+
+    func presence() async throws -> [String: Any] {
+        try Self.object(from: await request("jarvis/presence"))
+    }
+
+    func checkPresence(_ state: String) async throws -> [String: Any] {
+        try Self.object(from: await request("jarvis/presence/check", method: "POST", body: ["state": state]))
+    }
+
+    func runAgent(goal: String, maxSteps: Int = 10) async throws -> [String: Any] {
+        try Self.object(from: await request("jarvis/agent/run", method: "POST",
+                                            body: ["goal": goal, "max_steps": maxSteps]))
+    }
+
+    func voiceProfile() async throws -> [String: Any] {
+        try Self.object(from: await request("jarvis/voice/profile"))
+    }
+
+    func clearVoiceProfile() async throws -> [String: Any] {
+        try Self.object(from: await request("jarvis/voice/profile/clear", method: "POST", body: [:]))
+    }
+
+    // MARK: - Laya
+
+    func evaluate(decisionType: String, context: [String: Any],
+                  checkpoint: String = "default",
+                  simulateOffline: Bool = false) async throws -> LayaDecisionResponse {
+        let data = try await request("laya/evaluate?simulate_offline=\(simulateOffline)",
+                                     method: "POST",
+                                     body: ["decision_type": decisionType,
+                                            "context": context,
+                                            "checkpoint": checkpoint])
+        return try JSONDecoder().decode(LayaDecisionResponse.self, from: data)
+    }
+
+    func layaDecisions(limit: Int = 50, decisionType: String? = nil) async throws -> [LayaDecisionRecord] {
+        var q = [URLQueryItem(name: "limit", value: String(limit))]
+        if let decisionType { q.append(URLQueryItem(name: "decision_type", value: decisionType)) }
+        let data = try await request("laya/decisions?" + Self.query(q))
+        return try JSONDecoder().decode([LayaDecisionRecord].self, from: data)
+    }
+
+    // MARK: - Learning loop
+    //
+    // Hyphenated prefix, per backend/app/api/learning_loop.py.
+
+    func runLearningLoop(taskAId: String? = nil, taskBId: String? = nil,
+                         failureOutput: String? = nil, successOutputB: String? = nil) async throws -> LearningLoopRun {
+        var q: [URLQueryItem] = []
+        if let taskAId { q.append(URLQueryItem(name: "task_a_id", value: taskAId)) }
+        if let taskBId { q.append(URLQueryItem(name: "task_b_id", value: taskBId)) }
+        if let failureOutput { q.append(URLQueryItem(name: "failure_output", value: failureOutput)) }
+        if let successOutputB { q.append(URLQueryItem(name: "success_output_b", value: successOutputB)) }
+        let suffix = q.isEmpty ? "" : "?" + Self.query(q)
+        let data = try await request("learning-loop/run" + suffix, method: "POST", body: [:])
+        return try JSONDecoder().decode(LearningLoopRun.self, from: data)
+    }
+
+    func lessons(limit: Int = 50) async throws -> [Lesson] {
+        let data = try await request("learning-loop/lessons?limit=\(limit)")
+        return try JSONDecoder().decode([Lesson].self, from: data)
+    }
+
+    /// 404 here means "no such learning loop", which is a different fact from
+    /// "host unreachable" and is surfaced as such.
+    func learningLoopEvidence(traceId: String) async throws -> [EventEnvelope] {
+        let data = try await request("learning-loop/evidence/\(traceId)")
+        return try JSONDecoder().decode([EventEnvelope].self, from: data)
+    }
+
+    // MARK: - Helpers
+
+    private static func object(from data: Data) throws -> [String: Any] {
+        guard let o = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw ApiError.malformed
+        }
+        return o
+    }
+
+    private static func query(_ items: [URLQueryItem]) -> String {
+        var c = URLComponents()
+        c.queryItems = items
+        return c.percentEncodedQuery ?? ""
     }
 
     // MARK: - SSE

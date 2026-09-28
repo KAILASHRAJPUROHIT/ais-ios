@@ -114,3 +114,176 @@ struct Health: Decodable {
         case statusLabel = "status_label"
     }
 }
+    enum CodingKeys: String, CodingKey {
+        case status, provenance, models, providers, testing, laya
+        case statusLabel = "status_label"
+    }
+}
+
+// MARK: - Laya
+//
+// Shapes below are transcribed from backend/app/schemas/laya.py. Only fields
+// verified against that source are typed; anything not confirmed is left out
+// rather than guessed, so a schema drift shows up as a missing value instead
+// of a silently wrong one.
+
+struct LayaChoiceResult: Decodable {
+    let type: String?
+    let selected: String?
+    let distribution: [String: Double]?
+}
+
+struct LayaScoreResult: Decodable {
+    let type: String?
+    let expected: Double?
+    let distribution: [String: Double]?
+}
+
+struct LayaNoulResult: Decodable {
+    let type: String?
+    let probabilityTrue: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case probabilityTrue = "probability_true"
+    }
+}
+
+/// A single question result. The backend models these as a discriminated
+/// union keyed on `type`, with the variant's fields inline in the same
+/// object -- there is no nested `value` wrapper.
+struct LayaQuestion: Decodable {
+    let choice: LayaChoiceResult?
+    let score: LayaScoreResult?
+    let noul: LayaNoulResult?
+    let type: String?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let t = try? c.decode(String.self, forKey: .type)
+        type = t
+        choice = (t == "choice") ? try? LayaChoiceResult(from: decoder) : nil
+        score  = (t == "score")  ? try? LayaScoreResult(from: decoder)  : nil
+        noul   = (t == "noul")   ? try? LayaNoulResult(from: decoder)   : nil
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case type
+    }
+}
+
+/// Response of POST /laya/evaluate.
+struct LayaDecisionResponse: Decodable {
+    let decisionId: String?
+    let schemaVersion: String?
+    let checkpoint: String?
+    let decisionTimeMs: Double?
+    let questions: [String: LayaQuestion]?
+    let evidenceRefs: [String]?
+    let applicability: String?
+    let isFallback: Bool?
+    let fallbackReason: String?
+    let taskId: String?
+    let modelId: String?
+    let createdAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case decisionId = "decision_id"
+        case schemaVersion = "schema_version"
+        case checkpoint
+        case decisionTimeMs = "decision_time_ms"
+        case questions, evidenceRefs = "evidence_refs"
+        case applicability, isFallback = "is_fallback"
+        case fallbackReason = "fallback_reason"
+        case taskId = "task_id"
+        case modelId = "model_id"
+        case createdAt = "created_at"
+    }
+}
+
+/// Row of GET /laya/decisions. Note the backend persists `questions` as a JSON
+/// *string* here, unlike the evaluate response, and `is_fallback` as an int.
+struct LayaDecisionRecord: Decodable, Identifiable {
+    let decisionId: String?
+    let decisionType: String?
+    let checkpoint: String?
+    let decisionTimeMs: Double?
+    let questions: String?
+    let isFallback: Int?
+    let fallbackReason: String?
+    let taskId: String?
+    let modelId: String?
+    let createdAt: String?
+
+    var id: String { decisionId ?? UUID().uuidString }
+
+    enum CodingKeys: String, CodingKey {
+        case decisionId = "decision_id"
+        case decisionType = "decision_type"
+        case checkpoint
+        case decisionTimeMs = "decision_time_ms"
+        case questions
+        case isFallback = "is_fallback"
+        case fallbackReason = "fallback_reason"
+        case taskId = "task_id"
+        case modelId = "model_id"
+        case createdAt = "created_at"
+    }
+}
+
+// MARK: - Learning loop
+//
+// NOTE the hyphen: the backend router is mounted at /learning-loop, not
+// /learning_loop. Transcribed from backend/app/api/learning_loop.py.
+
+struct LearningLoopRun: Decodable {
+    let traceId: String?
+    let loopId: String?
+    let taskAId: String?
+    let taskBId: String?
+    let lessonId: String?
+    let diagnosisId: String?
+    let assessmentId: String?
+    let gateId: String?
+    let evidenceAId: String?
+    let evidenceBId: String?
+    let preventionWorked: Bool?
+    let lessonStatus: String?
+    let eventCount: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case traceId = "trace_id"
+        case loopId = "loop_id"
+        case taskAId = "task_a_id"
+        case taskBId = "task_b_id"
+        case lessonId = "lesson_id"
+        case diagnosisId = "diagnosis_id"
+        case assessmentId = "assessment_id"
+        case gateId = "gate_id"
+        case evidenceAId = "evidence_a_id"
+        case evidenceBId = "evidence_b_id"
+        case preventionWorked = "prevention_worked"
+        case lessonStatus = "lesson_status"
+        case eventCount = "event_count"
+    }
+}
+
+struct Lesson: Decodable, Identifiable {
+    let memoryId: String?
+    let lessonCondition: String?
+    let preventionAction: String?
+    let validationHash: String?
+    let confidence: Double?
+    let createdAt: String?
+
+    var id: String { memoryId ?? UUID().uuidString }
+
+    enum CodingKeys: String, CodingKey {
+        case memoryId = "memory_id"
+        case lessonCondition = "lesson_condition"
+        case preventionAction = "prevention_action"
+        case validationHash = "validation_hash"
+        case confidence
+        case createdAt = "created_at"
+    }
+}
