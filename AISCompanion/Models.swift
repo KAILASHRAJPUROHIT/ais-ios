@@ -114,11 +114,6 @@ struct Health: Decodable {
         case statusLabel = "status_label"
     }
 }
-    enum CodingKeys: String, CodingKey {
-        case status, provenance, models, providers, testing, laya
-        case statusLabel = "status_label"
-    }
-}
 
 // MARK: - Laya
 //
